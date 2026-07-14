@@ -1,0 +1,194 @@
+<section id="realtime">
+
+    <section>
+        <h2>Le temps réel sur le web</h2>
+    </section>
+
+    <section>
+        <h3>Qu'est-ce que le temps réel ?</h3>
+        <p>Une application web <strong>temps réel</strong> est capable de transmettre des informations à ses utilisateurs <strong>instantanément</strong>, sans qu'ils aient besoin de recharger la page.</p>
+        <p>Le défi est de taille car le protocole HTTP est fondamentalement <strong>unidirectionnel</strong> : c'est toujours le client qui initie la communication.</p>
+    </section>
+
+    <section>
+        <h3>Cas d'usage concrets</h3>
+        <ul>
+            <li><strong>Messagerie instantanée</strong> : Slack, Discord, WhatsApp Web</li>
+            <li><strong>Notifications</strong> : réseaux sociaux, e-commerce</li>
+            <li><strong>Tableaux de bord</strong> : métriques système, analytics en direct</li>
+            <li><strong>Jeux multijoueurs</strong> : synchronisation des positions</li>
+            <li><strong>Collaboration</strong> : Google Docs, Figma, tableaux blancs</li>
+            <li><strong>Trading</strong> : cours boursiers en temps réel</li>
+        </ul>
+    </section>
+
+    <section>
+        <h3>Le modèle HTTP classique</h3>
+        <p>Le protocole HTTP repose sur un modèle <strong>requête / réponse</strong> :</p>
+        <ol>
+            <li>Le client envoie une <strong>requête</strong> au serveur</li>
+            <li>Le serveur traite la requête et renvoie une <strong>réponse</strong></li>
+            <li>La connexion est <strong>fermée</strong></li>
+        </ol>
+        <p>Le serveur ne peut pas contacter le client de sa propre initiative : il doit <strong>attendre d'être sollicité</strong>.</p>
+    </section>
+
+    <section>
+        <h3>Limitations de HTTP pour le temps réel</h3>
+        <ul>
+            <li>Le serveur ne peut pas <strong>pousser</strong> de données vers le client</li>
+            <li>Chaque requête implique des <strong>headers HTTP lourds</strong></li>
+            <li>Établir une connexion TCP/TLS a un <strong>coût</strong> (latence)</li>
+            <li>Le modèle <strong>stateless</strong> complique la gestion d'état</li>
+        </ul>
+        <footer>
+            <a href="https://developer.mozilla.org/fr/docs/Web/HTTP/Overview" class="info" target="_blank">MDN : Aperçu du protocole HTTP</a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>Les techniques disponibles</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Technique</th>
+                    <th>Direction</th>
+                    <th>Latence</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Polling</td>
+                    <td>Client → Serveur</td>
+                    <td>Élevée</td>
+                </tr>
+                <tr>
+                    <td>Long Polling</td>
+                    <td>Client → Serveur</td>
+                    <td>Moyenne</td>
+                </tr>
+                <tr>
+                    <td>Server-Sent Events</td>
+                    <td>Serveur → Client</td>
+                    <td>Faible</td>
+                </tr>
+                <tr>
+                    <td>WebSocket</td>
+                    <td>Bidirectionnel</td>
+                    <td>Très faible</td>
+                </tr>
+                <tr>
+                    <td>Socket.io</td>
+                    <td>Bidirectionnel</td>
+                    <td>Très faible</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section>
+        <h3>Mise en place de l'environnement</h3>
+        <p>Nous allons utiliser <strong>Node.js</strong> et <strong>TypeScript</strong> tout au long de ce cours.</p>
+        <p>Depuis <strong>Node.js 22.18</strong>, le TypeScript s'exécute nativement (sans <code>ts-node</code>) grâce au <em>type stripping</em> : vérifiez que votre version est à jour.</p>
+        <pre class="language-shell"><code class="language-shell"># Vérifier Node.js et npm (>= 22.18 requis)
+node -v
+npm -v
+
+# Initialiser le projet et installer TypeScript localement
+npm init -y
+npm install express # HTTP framework
+npm install --save-dev typescript @types/node @types/express</code></pre>
+    </section>
+
+    <section>
+        <h3>Structure du projet</h3>
+        <p>Nous allons utiliser cette structure pour chaque exercice du cours :</p>
+        <pre class="language-shell"><code class="language-shell">projet/
+├── src/
+│   └── client/
+│       └── index.html
+│       └── main.ts
+│   ├── server/
+│       └── server.ts
+├── package.json
+└── tsconfig.json</code></pre>
+    </section>
+
+    <section>
+        <h3>Mise en place de l'environnement</h3>
+        <p>Nous allons maintenant modifier le fichier package.json :</p>
+        <pre class="language-json"><code class="language-json">{
+    "scripts": {
+        "watch:server": "node --watch --import=tsx src/server/server.ts",
+        "watch:client": "tsc --watch",
+        "typescript": "npx tsc --noEmit"
+    },
+    "type": "module"
+}</code></pre>
+    </section>
+
+    <section>
+        <h3>Configuration TypeScript</h3>
+        <pre class="language-json"><code class="language-json">// tsconfig.json
+{
+  "compilerOptions": {
+    "rootDir": "src/",
+    "outDir": "src/client/dist/",
+    "target": "ES2020",
+    "module": "esnext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/client/**/*.ts"]
+}</code></pre>
+    </section>
+
+    <section>
+        <h3>Git config</h3>
+        <pre class="language-git"><code class="language-git"># .gitignore
+node_modules/
+src/client/dist/</code></pre>
+    </section>
+
+    <section>
+        <h3>Serveur HTTP de base</h3>
+        <pre class="language-typescript"><code class="language-typescript">// src/server/server.ts
+import express from 'express';
+import path from 'path';
+
+const app = express();
+
+app.use(express.json());
+app.use(express.static(path.join(import.meta.dirname, '../client')));
+
+app.listen(3000);</code></pre>
+    </section>
+
+    <section>
+        <h3>Fichiers clients</h3>
+        <pre class="language-html"><code class="language-html">&lt;!-- src/client/index.html --&gt;
+&lt;!DOCTYPE html&gt;
+&lt;html lang="fr"&gt;
+&lt;head&gt;
+    &lt;meta charset="UTF-8"&gt;
+    &lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;
+    &lt;title&gt;Document&lt;/title&gt;
+    &lt;script type="module" src="main.js" defer>&lt;/script&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;h1&gt;It works!&lt;/h1&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+        <pre class="language-js"><code class="language-js">// src/client/main.ts
+console.log('Hello, World!');</code></pre>
+    </section>
+
+    <section>
+        <h3>Compiler et charger le client/serveur</h3>
+        <pre class="language-shell"><code class="language-shell">npm run watch:client</code></pre>
+        <pre class="language-shell"><code class="language-shell">npm run watch:server</code></pre>
+        <p>Ouvrir <a href="http://localhost:3000">http://localhost:3000</a> dans votre navigateur.</p>
+    </section>
+
+</section>

@@ -1,0 +1,173 @@
+<section id="sse">
+
+    <section>
+        <h2>Server-Sent Events</h2>
+    </section>
+
+    <section>
+        <h3>Présentation</h3>
+        <p>Les <strong>Server-Sent Events</strong> (SSE) permettent au serveur d'<strong>envoyer des données en continu</strong> vers le client via une connexion HTTP persistante.</p>
+        <p>Contrairement au long polling, la connexion reste <strong>ouverte indéfiniment</strong> et le client n'a pas besoin de renvoyer de requête.</p>
+        <img src="assets/images/sse.svg" alt="Server-Sent Events diagram">
+    </section>
+
+    <section>
+        <h3>Format du protocole SSE</h3>
+        <p>Le serveur envoie des données au format texte simple, chaque événement étant séparé par une <strong>ligne vide</strong> :</p>
+        <pre class="language-http"><code class="language-http">HTTP/1.1 200 OK
+Content-Type: text/event-stream
+Cache-Control: no-cache
+Connection: keep-alive
+
+data: {"user": "Alice", "message": "Bonjour !"}
+
+event: notification
+data: {"type": "info", "text": "Nouvel utilisateur connecté"}
+id: 42
+
+: commentaire ignoré par le client</code></pre>
+        <footer>
+            <a href="https://developer.mozilla.org/fr/docs/Web/API/Server-sent_events/Using_server-sent_events" class="info" target="_blank">MDN : Server-sent events</a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>Configuration du serveur SSE</h3>
+        <pre class="language-typescript"><code class="language-typescript">import express, { Request, Response } from 'express';
+
+const app = express();
+const clients = new Set&lt;Response&gt;();
+
+app.get('/events', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  // Envoyer un événement initial
+  res.write('data: {"type":"connected"}\n\n');
+
+  clients.add(res);
+
+  req.on('close', () => {
+    clients.delete(res);
+  });
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Envoyer des événements depuis le serveur</h3>
+        <pre class="language-typescript"><code class="language-typescript">function sendEvent(res: Response, data: unknown, event?: string): void {
+  if (event) {
+    res.write(`event: ${event}\n`);
+  }
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+function broadcast(data: unknown, event?: string): void {
+  clients.forEach(client => sendEvent(client, data, event));
+}
+
+// Exemple : envoyer l'heure serveur toutes les secondes
+setInterval(() => {
+  broadcast({ time: new Date().toISOString() }, 'tick');
+}, 1000);</code></pre>
+    </section>
+
+    <section>
+        <h3>Utilisation de l'API EventSource côté client</h3>
+        <pre class="language-typescript"><code class="language-typescript">const eventSource = new EventSource('/events');
+
+// Écouter les événements par défaut (data sans event)
+eventSource.onmessage = (event: MessageEvent) => {
+  const data = JSON.parse(event.data);
+  console.log('Message reçu :', data);
+};
+
+// Écouter un type d'événement spécifique
+eventSource.addEventListener('tick', (event: MessageEvent) => {
+  const { time } = JSON.parse(event.data);
+  document.getElementById('clock')!.textContent = time;
+});
+
+// Gestion des erreurs
+eventSource.onerror = () => {
+  console.error('Connexion SSE perdue, reconnexion automatique...');
+};</code></pre>
+        <footer>
+            <a href="https://developer.mozilla.org/fr/docs/Web/API/EventSource" class="info" target="_blank">MDN : EventSource</a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>Reconnexion automatique et ID d'événement</h3>
+        <p>SSE gère nativement la reconnexion. Le client renvoie le header <code>Last-Event-ID</code> pour ne pas manquer d'événements :</p>
+        <pre class="language-typescript"><code class="language-typescript">app.get('/events', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const lastId = req.headers['last-event-id'];
+
+  if (lastId) {
+    // Renvoyer les événements manqués depuis lastId
+    const missed = getMissedEvents(Number(lastId));
+    missed.forEach(event => {
+      res.write(`id: ${event.id}\n`);
+      res.write(`data: ${JSON.stringify(event.data)}\n\n`);
+    });
+  }
+
+  // Délai de reconnexion suggéré (ms)
+  res.write('retry: 3000\n\n');
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Avantages et limitations</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Avantages</th>
+                    <th>Limitations</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>API native, simple d'usage</td>
+                    <td>Communication <strong>unidirectionnelle</strong> (serveur → client uniquement)</td>
+                </tr>
+                <tr>
+                    <td>Reconnexion automatique intégrée</td>
+                    <td>Pas de support Internet Explorer</td>
+                </tr>
+                <tr>
+                    <td>Support des événements nommés</td>
+                    <td>Limité à 6 connexions simultanées par navigateur (HTTP/1.1)</td>
+                </tr>
+                <tr>
+                    <td>Transport HTTP standard (proxies, CDN)</td>
+                    <td>Texte uniquement (pas de binaire)</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section>
+        <h3>Exercice</h3>
+        <div class="instructions">
+            <ol>
+                <li>Créer un <strong>tableau de bord de monitoring</strong> affichant en temps réel :
+                    <ul>
+                        <li>L'utilisation CPU et mémoire du serveur (module <code>os</code> de Node.js)</li>
+                        <li>Le nombre de clients connectés</li>
+                        <li>Un horodatage mis à jour chaque seconde</li>
+                    </ul>
+                </li>
+                <li>Utiliser des événements SSE nommés différents pour chaque métrique</li>
+                <li>Ajouter un <strong>flux d'actualités</strong> : un formulaire permet d'ajouter une actualité qui est diffusée à tous les clients via SSE</li>
+            </ol>
+        </div>
+    </section>
+
+</section>

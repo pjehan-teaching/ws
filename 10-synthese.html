@@ -1,0 +1,161 @@
+<section id="synthese">
+
+    <section>
+        <h2>Synthèse &amp; Évaluation</h2>
+    </section>
+
+    <section>
+        <h3>Récapitulatif des techniques</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Technique</th>
+                    <th>Avantages</th>
+                    <th>Inconvénients</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Polling</strong></td>
+                    <td>Très simple, compatible partout</td>
+                    <td>Latence élevée, charge serveur inutile</td>
+                </tr>
+                <tr>
+                    <td><strong>Long Polling</strong></td>
+                    <td>Latence réduite, HTTP standard</td>
+                    <td>Connexions longues, gestion complexe</td>
+                </tr>
+                <tr>
+                    <td><strong>SSE</strong></td>
+                    <td>Natif, reconnexion auto, simple</td>
+                    <td>Unidirectionnel (serveur → client)</td>
+                </tr>
+                <tr>
+                    <td><strong>WebSocket</strong></td>
+                    <td>Bidirectionnel, faible latence, binaire</td>
+                    <td>Nécessite un serveur compatible</td>
+                </tr>
+                <tr>
+                    <td><strong>Socket.io</strong></td>
+                    <td>Fonctionnalités avancées, fallback</td>
+                    <td>Overhead, protocole propriétaire</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section>
+        <h3>Choisir la bonne technique</h3>
+        <p>La technique à choisir dépend de vos besoins :</p>
+        <ul>
+            <li><strong>Polling</strong> : données rarement mises à jour, pas de contrainte de latence</li>
+            <li><strong>Long Polling</strong> : notifications ponctuelles, environnement restreint (pas de WebSocket)</li>
+            <li><strong>SSE</strong> : flux de données serveur → client uniquement (logs, métriques, feeds)</li>
+            <li><strong>WebSocket natif</strong> : communication bidirectionnelle avec contrôle total, faible overhead</li>
+            <li><strong>Socket.io</strong> : applications complexes avec rooms, reconnexion, multi-transport</li>
+        </ul>
+    </section>
+
+    <section>
+        <h3>Arbre de décision</h3>
+        <pre class="language-shell"><code class="language-shell">Besoin de communication en temps réel ?
+│
+├── Unidirectionnel (serveur → client uniquement) ?
+│   ├── Oui → Server-Sent Events (SSE)
+│   └── Non → Communication bidirectionnelle
+│
+└── Bidirectionnel ?
+    ├── Simplicité maximale requise ?
+    │   └── Oui → Polling simple
+    │
+    ├── Fonctionnalités avancées (rooms, reconnexion, auth) ?
+    │   └── Oui → Socket.io
+    │
+    └── Contrôle total, performance maximale ?
+        └── Oui → WebSocket natif (bibliothèque ws)</code></pre>
+    </section>
+
+    <section>
+        <h3>Évolution technologique</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Période</th>
+                    <th>Technologie dominante</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>2000–2006</td>
+                    <td>Polling (AJAX)</td>
+                </tr>
+                <tr>
+                    <td>2006–2011</td>
+                    <td>Long polling (Comet)</td>
+                </tr>
+                <tr>
+                    <td>2011–présent</td>
+                    <td>WebSocket (RFC 6455)</td>
+                </tr>
+                <tr>
+                    <td>2012–présent</td>
+                    <td>SSE (EventSource API)</td>
+                </tr>
+                <tr>
+                    <td>2014–présent</td>
+                    <td>Socket.io (abstraction WebSocket)</td>
+                </tr>
+                <tr>
+                    <td>2022–présent</td>
+                    <td>WebTransport (HTTP/3, QUIC)</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section>
+        <h3>Et demain ? WebTransport</h3>
+        <p><strong>WebTransport</strong> est une API expérimentale basée sur <strong>HTTP/3 et QUIC</strong> qui promet :</p>
+        <ul>
+            <li>Latence encore plus faible que WebSocket (pas de blocage en tête de file)</li>
+            <li>Multiplexage de flux indépendants</li>
+            <li>Support des datagrammes (UDP-like) pour les jeux</li>
+            <li>Meilleure gestion de la perte de paquets</li>
+        </ul>
+        <footer>
+            <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebTransport_API" class="info" target="_blank">MDN : WebTransport API</a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>Ressources complémentaires</h3>
+        <ul>
+            <li><a href="https://www.typescriptlang.org/docs/" target="_blank">TypeScript Documentation</a></li>
+            <li><a href="https://nodejs.org/docs/" target="_blank">Node.js Documentation</a></li>
+            <li><a href="https://socket.io/docs/v4/" target="_blank">Socket.io Documentation</a></li>
+            <li><a href="https://developer.mozilla.org/fr/docs/Web/API/WebSocket" target="_blank">MDN : WebSocket API</a></li>
+            <li><a href="https://developer.mozilla.org/fr/docs/Web/API/Server-sent_events" target="_blank">MDN : Server-sent events</a></li>
+            <li><a href="https://datatracker.ietf.org/doc/html/rfc6455" target="_blank">RFC 6455 : The WebSocket Protocol</a></li>
+        </ul>
+    </section>
+
+    <section>
+        <h3>Évaluation pratique</h3>
+        <div class="instructions">
+            <ol>
+                <li>Implémenter une fonctionnalité temps réel de votre choix parmi :
+                    <ul>
+                        <li>Un système de quiz en direct multijoueur</li>
+                        <li>Un tableau blanc collaboratif</li>
+                        <li>Un outil de gestion de projet avec notifications</li>
+                        <li>Un jeu multijoueur simple (morpion, puissance 4...)</li>
+                    </ul>
+                </li>
+                <li>Justifier le choix de la <strong>technologie utilisée</strong> (Polling, SSE, WebSocket, Socket.io)</li>
+                <li>Le code TypeScript doit être <strong>correctement typé</strong></li>
+                <li>Documenter les choix d'architecture</li>
+            </ol>
+        </div>
+    </section>
+
+</section>

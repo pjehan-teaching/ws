@@ -1,0 +1,188 @@
+<section id="socketio-rooms">
+
+    <section>
+        <h2>Socket.io — Rooms &amp; Multi-clients</h2>
+    </section>
+
+    <section>
+        <h3>Rooms et Namespaces</h3>
+        <img src="assets/images/socketio-rooms.svg" alt="Socket.io Rooms">
+        <footer>
+            <a href="https://socket.io/docs/v4/rooms/" class="info" target="_blank">Socket.io : Rooms</a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>Rejoindre et quitter une room</h3>
+        <pre class="language-typescript"><code class="language-typescript">io.on('connection', (socket) => {
+
+  socket.on('room:join', (roomName: string) => {
+    socket.join(roomName);
+
+    // Confirmer à l'utilisateur qu'il a rejoint la room
+    socket.emit('room:joined', roomName);
+
+    // Notifier les autres membres de la room
+    socket.to(roomName).emit('room:user-joined', {
+      userId: socket.id,
+      roomName
+    });
+  });
+
+  socket.on('room:leave', (roomName: string) => {
+    socket.leave(roomName);
+    socket.to(roomName).emit('room:user-left', {
+      userId: socket.id,
+      roomName
+    });
+  });
+
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Envoyer des messages dans une room</h3>
+        <pre class="language-typescript"><code class="language-typescript">io.on('connection', (socket) => {
+
+  socket.on('room:message', (data: {
+    roomName: string;
+    text: string;
+    author: string;
+  }) => {
+    const message = {
+      id: Date.now(),
+      ...data,
+      timestamp: new Date().toISOString()
+    };
+
+    // Envoyer à tous les membres de la room (y compris l'émetteur)
+    io.to(data.roomName).emit('room:message', message);
+  });
+
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Lister les membres d'une room</h3>
+        <pre class="language-typescript"><code class="language-typescript">async function getRoomMembers(roomName: string): Promise&lt;string[]&gt; {
+  const sockets = await io.in(roomName).fetchSockets();
+  return sockets.map(s => s.data.username ?? s.id);
+}
+
+io.on('connection', (socket) => {
+
+  socket.on('room:get-members', async (roomName: string) => {
+    const members = await getRoomMembers(roomName);
+    socket.emit('room:members', { roomName, members });
+  });
+
+  socket.on('room:join', async (roomName: string) => {
+    socket.join(roomName);
+    const members = await getRoomMembers(roomName);
+    // Mettre à jour la liste pour tous les membres
+    io.to(roomName).emit('room:members', { roomName, members });
+  });
+
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Stocker des données sur le socket</h3>
+        <p>La propriété <code>socket.data</code> permet de stocker des informations liées à un client :</p>
+        <pre class="language-typescript"><code class="language-typescript">io.on('connection', (socket) => {
+
+  socket.on('user:set-name', (username: string) => {
+    socket.data.username = username;
+    socket.data.connectedAt = new Date();
+
+    socket.emit('user:name-set', { username, id: socket.id });
+    socket.broadcast.emit('user:connected', { username });
+  });
+
+  socket.on('disconnect', () => {
+    if (socket.data.username) {
+      io.emit('user:disconnected', { username: socket.data.username });
+    }
+  });
+
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Gestion des rooms côté client</h3>
+        <pre class="language-typescript"><code class="language-typescript">// Rejoindre une room
+function joinRoom(roomName: string): void {
+  socket.emit('room:join', roomName);
+  currentRoom = roomName;
+}
+
+// Écouter les événements de la room
+socket.on('room:message', (message: RoomMessage) => {
+  if (message.roomName === currentRoom) {
+    displayMessage(message);
+  }
+});
+
+socket.on('room:members', (data: { roomName: string; members: string[] }) => {
+  updateMembersList(data.roomName, data.members);
+});
+
+socket.on('room:user-joined', (data: { userId: string; roomName: string }) => {
+  showNotification(`${data.userId} a rejoint ${data.roomName}`);
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Historique des messages (en mémoire)</h3>
+        <pre class="language-typescript"><code class="language-typescript">interface Message {
+  id: number;
+  roomName: string;
+  author: string;
+  text: string;
+  timestamp: string;
+}
+
+const history = new Map&lt;string, Message[]&gt;();
+
+function saveMessage(message: Message): void {
+  const roomHistory = history.get(message.roomName) ?? [];
+  roomHistory.push(message);
+  // Garder les 50 derniers messages par room
+  history.set(message.roomName, roomHistory.slice(-50));
+}
+
+// Envoyer l'historique lors d'une connexion à une room
+socket.on('room:join', (roomName: string) => {
+  socket.join(roomName);
+  const roomHistory = history.get(roomName) ?? [];
+  socket.emit('room:history', roomHistory);
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Projet pratique : chat multi-rooms</h3>
+        <p>Construire une application de chat complète avec :</p>
+        <ul>
+            <li>Saisie d'un <strong>nom d'utilisateur</strong> à la connexion</li>
+            <li><strong>Liste des rooms</strong> disponibles avec le nombre de participants</li>
+            <li>Possibilité de <strong>créer, rejoindre et quitter</strong> des rooms</li>
+            <li><strong>Historique des 50 derniers messages</strong> par room</li>
+            <li>Indicateur "<strong>est en train d'écrire...</strong>"</li>
+            <li><strong>Notifications</strong> de connexion / déconnexion</li>
+        </ul>
+    </section>
+
+    <section>
+        <h3>Exercice</h3>
+        <div class="instructions">
+            <ol>
+                <li>Implémenter le système de <strong>rooms dynamiques</strong> : les utilisateurs peuvent créer une room en tapant son nom</li>
+                <li>Afficher la <strong>liste des rooms actives</strong> avec leur nombre de participants (mise à jour en temps réel)</li>
+                <li>Ajouter la <strong>liste des participants</strong> dans le panneau latéral de chaque room</li>
+                <li>Implémenter l'<strong>historique des messages</strong> : les 50 derniers messages s'affichent à l'arrivée dans une room</li>
+                <li>Gérer proprement la <strong>déconnexion</strong> : retirer l'utilisateur de toutes ses rooms et notifier les membres</li>
+            </ol>
+        </div>
+    </section>
+
+</section>

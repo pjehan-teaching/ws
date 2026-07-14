@@ -1,0 +1,209 @@
+<section id="socketio-bases">
+
+    <section>
+        <h2>Socket.io — Bases</h2>
+    </section>
+
+    <section>
+        <h3>Présentation de Socket.io</h3>
+        <div class="container">
+            <div class="col" style="flex: 2;">
+                <p><strong>Socket.io</strong> est une bibliothèque qui abstrait la communication temps réel et ajoute de nombreuses fonctionnalités au-dessus des WebSockets natifs.</p>
+                <ul>
+                    <li>Reconnexion automatique</li>
+                    <li>Fallback vers long polling si WebSocket indisponible</li>
+                    <li>Événements personnalisés</li>
+                    <li>Rooms et namespaces</li>
+                    <li>Accusés de réception (acknowledgements)</li>
+                </ul>
+            </div>
+            <div class="col">
+                <img src="assets/images/socketio.svg" alt="Socket.io">
+            </div>
+        </div>
+        <footer>
+            <a href="https://socket.io/docs/v4/" class="info" target="_blank">Documentation officielle Socket.io v4</a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>Socket.io n'est pas un WebSocket "pur"</h3>
+        <p>Socket.io utilise son propre <strong>protocole applicatif</strong> au-dessus du transport (WebSocket ou HTTP) :</p>
+        <ul>
+            <li>Un client Socket.io ne peut pas se connecter à un serveur WebSocket natif (et vice-versa)</li>
+            <li>Le premier échange se fait toujours en <strong>HTTP long polling</strong>, avant de basculer sur WebSocket</li>
+            <li>Ce comportement peut être forcé : <code>transports: ['websocket']</code></li>
+        </ul>
+    </section>
+
+    <section>
+        <h3>Installation</h3>
+        <pre class="language-shell"><code class="language-shell"># Côté serveur
+npm install socket.io
+
+# Côté client (si module bundler)
+npm install socket.io-client
+
+# Types TypeScript inclus dans le package socket.io</code></pre>
+        <p>Socket.io v4 inclut les types TypeScript nativement, aucune installation de <code>@types</code> supplémentaire n'est nécessaire.</p>
+    </section>
+
+    <section>
+        <h3>Configuration du serveur Socket.io</h3>
+        <pre class="language-typescript"><code class="language-typescript">import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+
+const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: 'http://localhost:3000',
+    methods: ['GET', 'POST']
+  }
+});
+
+io.on('connection', (socket) => {
+  console.log(`Client connecté : ${socket.id}`);
+
+  socket.on('disconnect', (reason) => {
+    console.log(`Client déconnecté (${reason}) : ${socket.id}`);
+  });
+});
+
+httpServer.listen(3000);</code></pre>
+    </section>
+
+    <section>
+        <h3>Événements personnalisés côté serveur</h3>
+        <pre class="language-typescript"><code class="language-typescript">io.on('connection', (socket) => {
+
+  // Écouter un événement du client
+  socket.on('chat:message', (data: { author: string; text: string }) => {
+    console.log(`Message de ${data.author} : ${data.text}`);
+
+    // Diffuser à tous les clients (y compris l'émetteur)
+    io.emit('chat:message', {
+      ...data,
+      id: Date.now(),
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  socket.on('user:typing', (username: string) => {
+    // Diffuser à tous sauf l'émetteur
+    socket.broadcast.emit('user:typing', username);
+  });
+
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Configuration du client Socket.io</h3>
+        <pre class="language-html"><code class="language-html">&lt;script type="importmap"&gt;
+    {
+        "imports": {
+            "socket.io-client": "https://cdn.jsdelivr.net/npm/socket.io-client@4.8.1/+esm"
+        }
+    }
+&lt;/script&gt;</code></pre>
+        <pre class="language-typescript" style="max-height: 40vh"><code class="language-typescript">import { io, Socket } from 'socket.io-client';
+
+const socket: Socket = io('http://localhost:3000', {
+  autoConnect: true,
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000
+});
+
+socket.on('connect', () => {
+  console.log(`Connecté avec l'id : ${socket.id}`);
+});
+
+socket.on('disconnect', (reason) => {
+  console.log(`Déconnecté : ${reason}`);
+});
+
+socket.on('connect_error', (error) => {
+  console.error('Erreur de connexion :', error.message);
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Écouter et émettre des événements côté client</h3>
+        <pre class="language-typescript"><code class="language-typescript">// Écouter un événement du serveur
+socket.on('chat:message', (data: {
+  id: number;
+  author: string;
+  text: string;
+  timestamp: string;
+}) => {
+  displayMessage(data);
+});
+
+// Émettre un événement vers le serveur
+function sendMessage(text: string, author: string): void {
+  socket.emit('chat:message', { text, author });
+}
+
+// Indiquer que l'utilisateur est en train de taper
+const input = document.getElementById('message-input')!;
+input.addEventListener('input', () => {
+  socket.emit('user:typing', 'Alice');
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Les différents modes d'émission</h3>
+        <pre class="language-typescript"><code class="language-typescript">// Envoyer au client actuel uniquement
+socket.emit('event', data);
+
+// Envoyer à tous les clients sauf l'émetteur
+socket.broadcast.emit('event', data);
+
+// Envoyer à tous les clients connectés
+io.emit('event', data);
+
+// Envoyer à une room spécifique
+io.to('room-name').emit('event', data);
+
+// Envoyer à tous dans la room sauf l'émetteur
+socket.to('room-name').emit('event', data);
+
+// Envoyer à un socket spécifique (message privé)
+io.to(socketId).emit('event', data);</code></pre>
+        <footer>
+            <a href="https://socket.io/docs/v4/emit-cheatsheet/" class="info" target="_blank">Socket.io : Emit cheatsheet</a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>Accusés de réception (acknowledgements)</h3>
+        <p>Socket.io permet de confirmer la réception d'un événement, comme un callback :</p>
+        <pre class="language-typescript"><code class="language-typescript">// Côté client : attendre une confirmation du serveur
+socket.emit('chat:message', { text: 'Bonjour' }, (response: { ok: boolean; id: number }) => {
+  if (response.ok) {
+    console.log('Message enregistré avec l\'id :', response.id);
+  }
+});
+
+// Côté serveur : envoyer la confirmation
+socket.on('chat:message', (data, callback) => {
+  const saved = saveMessage(data);
+  callback({ ok: true, id: saved.id });
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Exercice</h3>
+        <div class="instructions">
+            <ol>
+                <li>Refactoriser le chat WebSocket natif en utilisant <strong>Socket.io</strong></li>
+                <li>Ajouter un événement <code>user:typing</code> avec un indicateur visuel "Alice est en train d'écrire..."</li>
+                <li>Implémenter un <strong>système de notifications</strong> : afficher un toast lorsqu'un utilisateur se connecte ou se déconnecte</li>
+                <li>Utiliser les <strong>acknowledgements</strong> pour confirmer l'envoi d'un message et afficher un statut "envoyé"</li>
+            </ol>
+        </div>
+    </section>
+
+</section>

@@ -1,0 +1,168 @@
+<section id="polling">
+
+    <section>
+        <h2>Polling</h2>
+    </section>
+
+    <section>
+        <h3>Principe du polling</h3>
+        <p>Le <strong>polling</strong> (ou interrogation périodique) consiste à envoyer des requêtes HTTP au serveur à <strong>intervalles réguliers</strong> pour vérifier si de nouvelles données sont disponibles.</p>
+        <p>C'est la solution la plus simple à implémenter, mais aussi la moins efficace.</p>
+    </section>
+
+    <section>
+        <h3>Fonctionnement</h3>
+        <ol>
+            <li>Le client envoie une requête toutes les N secondes</li>
+            <li>Le serveur répond immédiatement (avec ou sans nouvelles données)</li>
+            <li>Le client attend l'intervalle suivant puis recommence</li>
+        </ol>
+        <p>La <strong>latence maximale</strong> est égale à l'intervalle de polling.</p>
+        <img src="assets/images/polling.svg" alt="Polling diagram">
+    </section>
+
+    <section>
+        <h3>Côté serveur (TypeScript)</h3>
+        <pre class="language-typescript"><code class="language-typescript">import express from 'express';
+import path from 'path';
+
+const app = express();
+const messages: { id: number; text: string; author: string }[] = [];
+
+app.use(express.json());
+app.use(express.static(path.join(import.meta.dirname, '../client')));
+
+app.get('/api/messages', (req, res) => {
+  res.json(messages);
+});
+
+app.post('/api/messages', (req, res) => {
+  const message = { id: Date.now(), ...req.body };
+  messages.push(message);
+  res.status(201).json(message);
+});
+
+app.listen(3000);</code></pre>
+    </section>
+
+    <section>
+        <h3>Côté client (TypeScript)</h3>
+        <p>Ce code est enregistré dans <code>src/client/main.ts</code> :</p>
+        <pre class="language-typescript"><code class="language-typescript">async function fetchMessages(): Promise&lt;void&gt; {
+  const response = await fetch('/api/messages');
+  const messages = await response.json();
+
+  const container = document.getElementById('messages')!;
+  container.innerHTML = messages
+    .map((m: any) => `&lt;p&gt;&lt;strong&gt;${m.author}&lt;/strong&gt; : ${m.text}&lt;/p&gt;`)
+    .join('');
+}
+
+// Polling toutes les 2 secondes
+setInterval(fetchMessages, 2000);
+fetchMessages();</code></pre>
+    </section>
+
+
+    <section>
+        <h3>Côté client (HTML)</h3>
+        <pre class="language-html"><code class="language-html">&lt;!-- src/client/index.html --&gt;
+&lt;!DOCTYPE html&gt;
+&lt;html lang="fr"&gt;
+&lt;head&gt;
+  &lt;meta charset="UTF-8"&gt;
+  &lt;title&gt;Polling&lt;/title&gt;
+  &lt;script type="module" src="main.js" defer&gt;&lt;/script&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;div id="messages"&gt;&lt;/div&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+    </section>
+
+    <section>
+        <h3>Ajouter un message via curl</h3>
+        <p>Pour tester l'endpoint <code>POST /api/messages</code> sans passer par l'interface, on peut utiliser <strong>curl</strong> :</p>
+        <pre class="language-shell"><code class="language-shell">curl -X POST http://localhost:3000/api/messages \
+  -H "Content-Type: application/json" \
+  -d '{"author": "Alice", "text": "Bonjour depuis curl !"}'</code></pre>
+        <p>Le message apparaît dans le navigateur au prochain cycle de polling (dans les 2 secondes).</p>
+        <p>D'autres outils permettent d'envoyer ces requêtes sans ligne de commande :</p>
+        <ul>
+            <li><strong>Postman</strong> / <strong>Insomnia</strong> : interfaces graphiques complètes pour construire et sauvegarder des requêtes</li>
+            <li><strong>Thunder Client</strong> / <strong>REST Client</strong> : extensions VS Code, requêtes définies directement dans un fichier <code>.http</code></li>
+        </ul>
+    </section>
+
+    <section>
+        <h3>Analyse du trafic réseau</h3>
+        <p>Ouvrez les <strong>DevTools</strong> (<span class="keyboard-key">F12</span>) et observez l'onglet <strong>Network</strong>.</p>
+        <ul>
+            <li>Chaque requête génère des <strong>headers HTTP</strong> (plusieurs centaines d'octets)</li>
+            <li>La plupart des réponses sont <strong>vides</strong> ou identiques à la précédente</li>
+            <li>Avec 100 clients et un intervalle de 2s : <strong>50 requêtes/seconde</strong> vers le serveur</li>
+        </ul>
+    </section>
+
+    <section>
+        <h3>Analyse critique</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Aspect</th>
+                    <th>Évaluation</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Latence</td>
+                    <td>Élevée (dépend de l'intervalle)</td>
+                </tr>
+                <tr>
+                    <td>Charge serveur</td>
+                    <td>Élevée (requêtes inutiles)</td>
+                </tr>
+                <tr>
+                    <td>Bande passante</td>
+                    <td>Gaspillée (headers répétés)</td>
+                </tr>
+                <tr>
+                    <td>Simplicité</td>
+                    <td>Très simple à implémenter</td>
+                </tr>
+                <tr>
+                    <td>Compatibilité</td>
+                    <td>Universelle (simple HTTP)</td>
+                </tr>
+            </tbody>
+        </table>
+        <footer>
+            <a href="https://developer.mozilla.org/fr/docs/Web/API/Fetch_API" class="info" target="_blank">MDN : Fetch API</a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>Cas d'usage appropriés</h3>
+        <p>Le polling reste pertinent lorsque :</p>
+        <ul>
+            <li>Les données changent <strong>peu fréquemment</strong> (ex : toutes les minutes)</li>
+            <li>Une latence élevée est <strong>acceptable</strong></li>
+            <li>Le nombre de clients est <strong>faible</strong></li>
+            <li>La simplicité d'implémentation prime sur la performance</li>
+        </ul>
+        <p>Exemples : vérification de l'état d'une commande, rafraîchissement de météo.</p>
+    </section>
+
+    <section>
+        <h3>Exercice</h3>
+        <div class="instructions">
+            <ol>
+                <li>Créer un serveur Express qui expose un endpoint <code>/api/time</code> retournant l'heure serveur au format JSON</li>
+                <li>Créer un client HTML qui affiche l'heure en temps "quasi-réel" via polling toutes les secondes</li>
+                <li>Ajouter un endpoint <code>/api/messages</code> permettant d'envoyer et de lire des messages</li>
+                <li>Observer le trafic réseau dans les DevTools et noter le nombre de requêtes générées en 30 secondes</li>
+            </ol>
+        </div>
+    </section>
+
+</section>

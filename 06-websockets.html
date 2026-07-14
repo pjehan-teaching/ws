@@ -1,0 +1,232 @@
+<section id="websockets">
+
+    <section>
+        <h2>WebSockets</h2>
+    </section>
+
+    <section>
+        <h3>Le protocole WebSocket</h3>
+        <p>Le protocole <strong>WebSocket</strong> (RFC 6455, 2011) permet d'établir un canal de communication <strong>bidirectionnel full-duplex</strong> entre un client et un serveur sur une seule connexion TCP.</p>
+        <p>Contrairement à HTTP, la connexion reste <strong>ouverte</strong> : les deux parties peuvent s'envoyer des messages à tout moment.</p>
+        <footer>
+            <a href="https://datatracker.ietf.org/doc/html/rfc6455" class="info" target="_blank">RFC 6455 : The WebSocket Protocol</a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>Le handshake HTTP → WebSocket</h3>
+        <p>La connexion WebSocket démarre par une requête HTTP classique avec un header <code>Upgrade</code> :</p>
+        <pre class="language-http"><code class="language-http">GET /chat HTTP/1.1
+Host: localhost:8080
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+Sec-WebSocket-Version: 13</code></pre>
+        <p>Le serveur accepte la mise à niveau :</p>
+        <pre class="language-http"><code class="language-http">HTTP/1.1 101 Switching Protocols
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=</code></pre>
+        <footer>
+            <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers#server_handshake_response" class="info" target="_blank">
+                MDN : Réponse au handshake WebSocket
+            </a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>Différences fondamentales avec HTTP</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>HTTP</th>
+                    <th>WebSocket</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Requête/Réponse</td>
+                    <td>Canal permanent bidirectionnel</td>
+                </tr>
+                <tr>
+                    <td>Connexion fermée après la réponse</td>
+                    <td>Connexion maintenue ouverte</td>
+                </tr>
+                <tr>
+                    <td>Headers lourds à chaque échange</td>
+                    <td>Frames légères (2 à 14 octets d'overhead)</td>
+                </tr>
+                <tr>
+                    <td>Protocole <code>http://</code> / <code>https://</code></td>
+                    <td>Protocole <code>ws://</code> / <code>wss://</code></td>
+                </tr>
+                <tr>
+                    <td>Stateless</td>
+                    <td>Stateful (connexion persistante)</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section>
+        <h3>Format des frames WebSocket</h3>
+        <p>Les données sont transmises sous forme de <strong>frames</strong>, beaucoup plus légères que les messages HTTP :</p>
+        <ul>
+            <li><strong>FIN</strong> : indique si c'est la dernière frame du message</li>
+            <li><strong>Opcode</strong> : type de frame (texte, binaire, ping, pong, close)</li>
+            <li><strong>Mask</strong> : les données client→serveur sont masquées (sécurité)</li>
+            <li><strong>Payload length</strong> : longueur des données (7, 16 ou 64 bits)</li>
+            <li><strong>Payload data</strong> : les données proprement dites</li>
+        </ul>
+        <footer>
+            <a href="https://developer.mozilla.org/fr/docs/Web/API/WebSockets_API/Writing_WebSocket_servers" class="info" target="_blank">MDN : Écrire un serveur WebSocket</a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>Installation de la bibliothèque ws</h3>
+        <pre class="language-shell"><code class="language-shell">npm install ws
+npm install --save-dev @types/ws</code></pre>
+        <p>La bibliothèque <code>ws</code> est l'implémentation WebSocket la plus populaire pour Node.js : performante, légère et sans dépendances.</p>
+        <footer>
+            <a href="https://github.com/websockets/ws" class="info" target="_blank">GitHub : websockets/ws</a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>Serveur WebSocket basique</h3>
+        <pre class="language-typescript" style="max-height: 60vh"><code>import { WebSocketServer, WebSocket } from 'ws';
+import { createServer } from 'http';
+import express from 'express';
+
+const app = express();
+const server = createServer(app);
+const wss = new WebSocketServer({ server });
+
+wss.on('connection', (ws: WebSocket) => {
+  console.log('Nouveau client connecté');
+
+  ws.on('message', (data: Buffer) => {
+    const message = data.toString();
+    console.log('Message reçu :', message);
+
+    // Renvoyer le message à tous les clients connectés
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    });
+  });
+
+  ws.on('close', () => console.log('Client déconnecté'));
+  ws.on('error', (err) => console.error('Erreur :', err));
+});
+
+server.listen(8080);</code></pre>
+    </section>
+
+    <section>
+        <h3>Client WebSocket natif (navigateur)</h3>
+        <pre class="language-typescript"><code class="language-typescript">const socket = new WebSocket('ws://localhost:8080');
+
+socket.addEventListener('open', () => {
+  console.log('Connecté au serveur WebSocket');
+  socket.send(JSON.stringify({ type: 'hello', text: 'Bonjour !' }));
+});
+
+socket.addEventListener('message', (event: MessageEvent) => {
+  const data = JSON.parse(event.data);
+  console.log('Message reçu :', data);
+  displayMessage(data);
+});
+
+socket.addEventListener('close', (event: CloseEvent) => {
+  console.log(`Connexion fermée (code: ${event.code})`);
+});
+
+socket.addEventListener('error', () => {
+  console.error('Erreur WebSocket');
+});</code></pre>
+        <footer>
+            <a href="https://developer.mozilla.org/fr/docs/Web/API/WebSocket" class="info" target="_blank">MDN : WebSocket API</a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>États d'une connexion WebSocket</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Constante</th>
+                    <th>Valeur</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>CONNECTING</code></td>
+                    <td>0</td>
+                    <td>Connexion en cours d'établissement</td>
+                </tr>
+                <tr>
+                    <td><code>OPEN</code></td>
+                    <td>1</td>
+                    <td>Connexion ouverte, envoi possible</td>
+                </tr>
+                <tr>
+                    <td><code>CLOSING</code></td>
+                    <td>2</td>
+                    <td>Fermeture en cours</td>
+                </tr>
+                <tr>
+                    <td><code>CLOSED</code></td>
+                    <td>3</td>
+                    <td>Connexion fermée</td>
+                </tr>
+            </tbody>
+        </table>
+        <pre class="language-typescript"><code class="language-typescript">if (socket.readyState === WebSocket.OPEN) {
+  socket.send('Message envoyé en toute sécurité');
+}</code></pre>
+    </section>
+
+    <section>
+        <h3>Chat bidirectionnel : exemple complet</h3>
+        <pre class="language-typescript"><code class="language-typescript">interface ChatMessage {
+  author: string;
+  text: string;
+  timestamp: number;
+}
+
+wss.on('connection', (ws: WebSocket) => {
+  ws.on('message', (data: Buffer) => {
+    try {
+      const message: ChatMessage = JSON.parse(data.toString());
+
+      // Diffuser à tous les autres clients
+      wss.clients.forEach(client => {
+        if (client !== ws && client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify(message));
+        }
+      });
+    } catch {
+      ws.send(JSON.stringify({ error: 'Format invalide' }));
+    }
+  });
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Exercice</h3>
+        <div class="instructions">
+            <ol>
+                <li>Créer un <strong>chat bidirectionnel</strong> avec la bibliothèque <code>ws</code> en TypeScript</li>
+                <li>Afficher un <strong>message de bienvenue</strong> à chaque nouveau connecté</li>
+                <li>Notifier tous les clients lorsqu'un utilisateur se <strong>déconnecte</strong></li>
+                <li>Afficher le <strong>nombre de clients connectés</strong> mis à jour en temps réel</li>
+                <li>Ajouter des messages de type <strong>ping/pong</strong> pour détecter les connexions mortes</li>
+            </ol>
+        </div>
+    </section>
+
+</section>

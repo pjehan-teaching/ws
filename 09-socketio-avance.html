@@ -1,0 +1,251 @@
+<section id="socketio-avance">
+
+    <section>
+        <h2>Socket.io — Cas avancés</h2>
+    </section>
+
+    <section>
+        <h3>Namespaces vs Rooms</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Namespaces</th>
+                    <th>Rooms</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Définition</strong></td>
+                    <td>Définis côté serveur</td>
+                    <td>Créés dynamiquement</td>
+                </tr>
+                <tr>
+                    <td><strong>Connexion</strong></td>
+                    <td>Connexion séparée par namespace</td>
+                    <td>Un socket peut rejoindre plusieurs rooms</td>
+                </tr>
+                <tr>
+                    <td><strong>Middleware</strong></td>
+                    <td>Middleware par namespace</td>
+                    <td>Pas de middleware dédié</td>
+                </tr>
+                <tr>
+                    <td><strong>Usage</strong></td>
+                    <td>Isoler des fonctionnalités (chat, admin...)</td>
+                    <td>Grouper des utilisateurs (salons, parties...)</td>
+                </tr>
+            </tbody>
+        </table>
+        <footer>
+            <a href="https://socket.io/docs/v4/namespaces/" class="info" target="_blank">Socket.io : Namespaces</a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>Créer des namespaces</h3>
+        <pre class="language-typescript"><code class="language-typescript">import { Server } from 'socket.io';
+
+const io = new Server(httpServer);
+
+const chatNsp = io.of('/chat');
+const notifNsp = io.of('/notifications');
+const adminNsp = io.of('/admin');
+
+chatNsp.on('connection', (socket) => {
+  console.log('Connexion au namespace /chat :', socket.id);
+});
+
+notifNsp.on('connection', (socket) => {
+  console.log('Connexion au namespace /notifications :', socket.id);
+});
+
+// Côté client
+const chatSocket = io('http://localhost:3000/chat');
+const notifSocket = io('http://localhost:3000/notifications');</code></pre>
+    </section>
+
+    <section>
+        <h3>Middleware d'authentification</h3>
+        <p>Les middlewares Socket.io s'exécutent à chaque nouvelle connexion, avant l'événement <code>connection</code> :</p>
+        <pre class="language-typescript"><code class="language-typescript">import { Socket } from 'socket.io';
+
+io.use((socket: Socket, next) => {
+  const token = socket.handshake.auth.token as string | undefined;
+
+  if (!token) {
+    return next(new Error('Token manquant'));
+  }
+
+  try {
+    const payload = verifyToken(token);
+    socket.data.userId = payload.userId;
+    socket.data.username = payload.username;
+    next();
+  } catch {
+    next(new Error('Token invalide'));
+  }
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Envoyer le token depuis le client</h3>
+        <pre class="language-typescript"><code class="language-typescript">const token = localStorage.getItem('token') ?? '';
+
+const socket = io('http://localhost:3000', {
+  auth: {
+    token
+  }
+});
+
+socket.on('connect_error', (error: Error) => {
+  if (error.message === 'Token manquant') {
+    // Rediriger vers la page de connexion
+    window.location.href = '/login';
+  }
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Messages privés</h3>
+        <p>Chaque socket possède son propre ID qui peut servir d'adresse pour les messages privés :</p>
+        <pre class="language-typescript"><code class="language-typescript">io.on('connection', (socket) => {
+
+  socket.on('private:message', (data: {
+    recipientId: string;
+    text: string;
+  }) => {
+    const message = {
+      from: socket.data.username,
+      fromId: socket.id,
+      text: data.text,
+      timestamp: new Date().toISOString()
+    };
+
+    // Envoyer au destinataire
+    io.to(data.recipientId).emit('private:message', message);
+
+    // Confirmer à l'émetteur
+    socket.emit('private:message:sent', {
+      to: data.recipientId,
+      ...message
+    });
+  });
+
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Typage TypeScript des événements</h3>
+        <p>Socket.io v4 permet de typer strictement tous les événements :</p>
+        <pre class="language-typescript"><code class="language-typescript">interface ServerToClientEvents {
+  'chat:message': (data: Message) => void;
+  'user:typing': (username: string) => void;
+  'room:members': (data: { roomName: string; members: string[] }) => void;
+  'private:message': (message: PrivateMessage) => void;
+}
+
+interface ClientToServerEvents {
+  'chat:message': (data: { text: string }, callback: (res: { ok: boolean }) => void) => void;
+  'room:join': (roomName: string) => void;
+  'private:message': (data: { recipientId: string; text: string }) => void;
+}
+
+interface SocketData {
+  userId: string;
+  username: string;
+}
+
+const io = new Server&lt;ClientToServerEvents, ServerToClientEvents, {}, SocketData&gt;(httpServer);</code></pre>
+    </section>
+
+    <section>
+        <h3>Gestion des erreurs et déconnexions</h3>
+        <pre class="language-typescript"><code class="language-typescript">io.on('connection', (socket) => {
+
+  socket.on('disconnect', async (reason: string) => {
+    // Récupérer toutes les rooms du socket avant sa déconnexion
+    const rooms = [...socket.rooms].filter(r => r !== socket.id);
+
+    for (const room of rooms) {
+      socket.to(room).emit('room:user-left', {
+        userId: socket.id,
+        username: socket.data.username,
+        roomName: room
+      });
+    }
+
+    io.emit('user:disconnected', {
+      username: socket.data.username,
+      reason
+    });
+  });
+
+  socket.on('error', (error: Error) => {
+    console.error(`Erreur socket ${socket.id} :`, error.message);
+  });
+
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Scalabilité avec Redis Adapter</h3>
+        <p>Pour déployer Socket.io sur <strong>plusieurs instances</strong> Node.js, il faut synchroniser les événements entre les serveurs :</p>
+        <pre class="language-shell"><code class="language-shell">npm install @socket.io/redis-adapter redis</code></pre>
+        <pre class="language-typescript"><code class="language-typescript">import { createClient } from 'redis';
+import { createAdapter } from '@socket.io/redis-adapter';
+
+const pubClient = createClient({ url: 'redis://localhost:6379' });
+const subClient = pubClient.duplicate();
+
+await Promise.all([pubClient.connect(), subClient.connect()]);
+
+io.adapter(createAdapter(pubClient, subClient));</code></pre>
+        <footer>
+            <a href="https://socket.io/docs/v4/redis-adapter/" class="info" target="_blank">Socket.io : Redis Adapter</a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>Bonnes pratiques de sécurité</h3>
+        <ul>
+            <li>Toujours configurer <strong>CORS</strong> avec une liste blanche d'origines</li>
+            <li>Valider et <strong>assainir</strong> toutes les données reçues du client</li>
+            <li>Utiliser <strong>HTTPS / WSS</strong> en production (jamais ws:// en clair)</li>
+            <li>Authentifier chaque connexion via un <strong>token JWT</strong> court (expiration)</li>
+            <li>Limiter le <strong>débit des messages</strong> par client (rate limiting)</li>
+            <li>Ne jamais faire confiance à <code>socket.id</code> comme identifiant permanent</li>
+        </ul>
+    </section>
+
+    <section>
+        <h3>Projet final</h3>
+        <p>Finaliser une application complète de <strong>chat en temps réel</strong> combinant :</p>
+        <ul>
+            <li>Authentification via <strong>middleware JWT</strong></li>
+            <li>Chat <strong>public</strong> et messages <strong>privés</strong></li>
+            <li>Salons thématiques (<strong>rooms</strong>)</li>
+            <li>Fonctionnalités avancées isolées dans des <strong>namespaces</strong></li>
+            <li><strong>Notifications</strong> de présence en temps réel</li>
+            <li>Tableau de bord d'<strong>administration</strong> (namespace <code>/admin</code>)</li>
+        </ul>
+    </section>
+
+    <section>
+        <h3>Exercice</h3>
+        <div class="instructions">
+            <ol>
+                <li>Ajouter un <strong>middleware JWT</strong> : seuls les utilisateurs authentifiés peuvent se connecter</li>
+                <li>Implémenter les <strong>messages privés</strong> entre deux utilisateurs identifiés par leur nom</li>
+                <li>Créer un namespace <code>/admin</code> réservé aux administrateurs avec un tableau de bord affichant :
+                    <ul>
+                        <li>La liste de tous les sockets connectés</li>
+                        <li>Le nombre de messages par room</li>
+                    </ul>
+                </li>
+                <li>Ajouter un système de <strong>rate limiting</strong> : bloquer un socket qui envoie plus de 10 messages en 5 secondes</li>
+            </ol>
+        </div>
+    </section>
+
+</section>

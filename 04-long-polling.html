@@ -1,0 +1,188 @@
+<section id="long-polling">
+
+    <section>
+        <h2>Long Polling</h2>
+    </section>
+
+    <section>
+        <h3>Principe du long polling</h3>
+        <p>Le <strong>long polling</strong> est une amélioration du polling classique : le serveur <strong>ne répond pas immédiatement</strong> à la requête, mais la <strong>maintient ouverte</strong> jusqu'à ce qu'une nouvelle donnée soit disponible.</p>
+        <p>Dès que le client reçoit une réponse, il envoie immédiatement une <strong>nouvelle requête</strong>.</p>
+    </section>
+
+    <section>
+        <h3>Fonctionnement</h3>
+        <ol>
+            <li>Le client envoie une requête au serveur</li>
+            <li>Le serveur <strong>bloque</strong> la réponse jusqu'à avoir des données</li>
+            <li>Dès qu'une donnée arrive, le serveur répond</li>
+            <li>Le client reçoit la réponse et envoie <strong>aussitôt</strong> une nouvelle requête</li>
+        </ol>
+        <img src="assets/images/long-polling.svg" alt="Long Polling diagram">
+    </section>
+
+    <section>
+        <h3>File d'attente côté serveur</h3>
+        <pre class="language-typescript"><code class="language-typescript">import express, { Request, Response } from 'express';
+
+const app = express();
+app.use(express.json());
+
+export type Message = { id: number; text: string; author: string };
+type Subscriber = (data: Message) => void;
+const subscribers: Subscriber[] = [];
+const messages: Message[] = [];
+
+function notifySubscribers(data: Message): void {
+  const pending = subscribers.splice(0); // Copier la liste et vider le tableau
+  pending.forEach(resolve => resolve(data));
+}
+
+function waitForMessage(): Promise&lt;Message&gt; {
+  return new Promise(resolve => {
+    subscribers.push(resolve);
+  });
+}</code></pre>
+    </section>
+
+    <section>
+        <h3>Endpoint long polling</h3>
+        <pre class="language-typescript"><code class="language-typescript">app.get('/api/long-poll', async (req: Request, res: Response) => {
+  const TIMEOUT = 30_000; // 30 secondes max
+
+  const timeoutPromise = new Promise&lt;null&gt;(resolve =>
+    setTimeout(() => resolve(null), TIMEOUT)
+  );
+
+  // Attendre soit un nouveau message, soit le timeout
+  const data = await Promise.race([waitForMessage(), timeoutPromise]);
+
+  if (data === null) {
+    res.status(204).end(); // Pas de nouvelles données
+  } else {
+    res.json(data);
+  }
+});
+
+app.post('/api/messages', (req: Request, res: Response) => {
+  const message: Message = { id: Date.now(), ...req.body };
+  messages.push(message);
+  notifySubscribers(message);
+  res.status(201).json(message);
+});</code></pre>
+    </section>
+
+    <section>
+        <h3>Côté client : reconnexion automatique</h3>
+        <pre class="language-typescript"><code class="language-typescript">async function listenForMessages(): Promise&lt;void&gt; {
+  try {
+    const response = await fetch('/api/long-poll');
+
+    if (response.status === 200) {
+      const message = await response.json();
+      displayMessage(message);
+    }
+    // Immédiatement relancer une nouvelle requête
+    listenForMessages();
+  } catch (error) {
+    // Attendre avant de réessayer en cas d'erreur réseau
+    console.error('Erreur réseau, reconnexion dans 3s...');
+    setTimeout(listenForMessages, 3000);
+  }
+}
+
+listenForMessages();</code></pre>
+    </section>
+
+    <section>
+        <h3>Gestion du timeout côté client</h3>
+        <pre class="language-typescript"><code class="language-typescript">async function listenForMessages(): Promise&lt;void&gt; {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 35_000);
+
+    const response = await fetch('/api/long-poll', {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (response.status === 200) {
+      const message = await response.json();
+      displayMessage(message);
+    }
+
+    listenForMessages();
+  } catch (error) {
+    if ((error as Error).name !== 'AbortError') {
+      setTimeout(listenForMessages, 3000);
+    }
+  }
+}</code></pre>
+        <footer>
+            <a href="https://developer.mozilla.org/fr/docs/Web/API/AbortController" class="info" target="_blank">MDN : AbortController</a>
+        </footer>
+    </section>
+
+    <section>
+        <h3>Analyse comparative</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Critère</th>
+                    <th>Polling</th>
+                    <th>Long Polling</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Latence</td>
+                    <td>= intervalle (ex: 2s)</td>
+                    <td>Quasi nulle</td>
+                </tr>
+                <tr>
+                    <td>Requêtes inutiles</td>
+                    <td>Nombreuses</td>
+                    <td>Aucune</td>
+                </tr>
+                <tr>
+                    <td>Connexions ouvertes</td>
+                    <td>Courtes</td>
+                    <td>Longues (bloquantes)</td>
+                </tr>
+                <tr>
+                    <td>Complexité serveur</td>
+                    <td>Faible</td>
+                    <td>Moyenne</td>
+                </tr>
+                <tr>
+                    <td>Scalabilité</td>
+                    <td>Mauvaise</td>
+                    <td>Meilleure</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section>
+        <h3>Limites du long polling</h3>
+        <ul>
+            <li>Les connexions ouvertes <strong>consomment des ressources</strong> serveur (mémoire, descripteurs de fichiers)</li>
+            <li>La gestion des <strong>timeouts et reconnexions</strong> ajoute de la complexité</li>
+            <li>Les <strong>proxies et load balancers</strong> peuvent couper les connexions trop longues</li>
+            <li>Problème des <strong>messages perdus</strong> pendant la reconnexion</li>
+        </ul>
+    </section>
+
+    <section>
+        <h3>Exercice</h3>
+        <div class="instructions">
+            <ol>
+                <li>Migrer l'application de chat précédente du polling simple vers le long polling</li>
+                <li>Implémenter un <strong>système de notifications</strong> : un bouton "Notifier" côté client envoie une alerte à tous les autres clients</li>
+                <li>Ajouter un <strong>compteur d'utilisateurs connectés</strong> qui se met à jour en temps réel</li>
+                <li>Observer la différence de trafic réseau dans les DevTools par rapport au polling simple</li>
+            </ol>
+        </div>
+    </section>
+
+</section>
