@@ -189,6 +189,35 @@ const io = new Server&lt;ClientToServerEvents, ServerToClientEvents, {}, SocketD
     </section>
 
     <section>
+        <h3>Scalabilité : cluster adapter (multi-cœurs)</h3>
+        <p>Sur une <strong>seule machine</strong>, le module <code>cluster</code> de Node.js permet de lancer un processus <em>worker</em> par cœur CPU disponible.</p>
+        <p>Chaque worker exécute son propre serveur Socket.io sur un port distinct : un adaptateur est nécessaire pour transmettre les événements entre les workers.</p>
+        <pre class="language-shell"><code class="language-shell">npm install @socket.io/cluster-adapter</code></pre>
+        <pre class="language-typescript"><code class="language-typescript">import cluster from 'node:cluster';
+import { availableParallelism } from 'node:os';
+import { createAdapter, setupPrimary } from '@socket.io/cluster-adapter';
+
+if (cluster.isPrimary) {
+  const numCPUs = availableParallelism();
+
+  for (let i = 0; i < numCPUs; i++) {
+    cluster.fork({ PORT: 3000 + i }); // un worker par cœur, sur un port distinct
+  }
+
+  setupPrimary();
+} else {
+  // Dans chaque worker : le serveur Socket.io utilise l'adaptateur de cluster
+  const io = new Server(server, {
+    adapter: createAdapter()
+  });
+}</code></pre>
+        <p>Le tutoriel officiel présente cette étape comme la première brique du scaling horizontal : répartir la charge sur les cœurs d'une même machine, avant de répartir sur plusieurs machines physiques — où l'adaptateur Redis prend alors le relais.</p>
+        <footer>
+            <a href="https://socket.io/docs/v4/tutorial/step-9" class="info" target="_blank">Tutoriel officiel Socket.io : Scaling horizontally (étape 9)</a>
+        </footer>
+    </section>
+
+    <section>
         <h3>Scalabilité avec Redis Adapter</h3>
         <p>Pour déployer Socket.io sur <strong>plusieurs instances</strong> Node.js, il faut synchroniser les événements entre les serveurs :</p>
         <pre class="language-shell"><code class="language-shell">npm install @socket.io/redis-adapter redis</code></pre>
